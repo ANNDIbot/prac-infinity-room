@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Infinity Room Demo v2.8</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Helvetica Neue', sans-serif;
+    }
+    #room {
+      text-align: center;
+      width: 80%;
+      max-width: 800px;
+    }
+    input {
+      padding: 10px;
+      font-size: 18px;
+      width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    .quote {
+      font-size: 26px;
+      color: #111;
+      opacity: 0;
+      transition: opacity 3s ease-in-out;
+    }
+    .fade-in {
+      opacity: 1;
+    }
+    .word-bubble {
+      position: absolute;
+      padding: 50px;
+      font-size: 28px;
+      font-weight: bold;
+      color: rgba(80, 80, 80, 0.9);
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), rgba(180,180,255,0.3));
+      border-radius: 50%;
+      box-shadow: 0 0 40px rgba(180, 180, 255, 0.5);
+      animation: floatBubble ease-in-out infinite;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.4s ease, opacity 2s ease-in-out;
+      opacity: 0;
+      z-index: 2;
+    }
+    .word-bubble:hover {
+      transform: scale(1.3);
+      box-shadow: 0 0 50px rgba(160, 160, 255, 0.9);
+    }
+    @keyframes floatBubble {
+      0% {
+        transform: translateY(0);
+        opacity: 0;
+      }
+      30% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(-250px);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <audio id="bgm" loop autoplay>
+    <source src="room-music.mp3" type="audio/mpeg">
+  </audio>
+
+  <div id="room">
+    <input type="text" id="keyword" placeholder="请输入一个关键词...">
+    <div class="quote" id="quote"></div>
+  </div>
+
+  <script>
+    const quotes = {
+      "孤独": ["你不是一个人，只是暂时回到自己身边。","有些沉默，是在等光回来。","世界很吵，而你刚好听得见自己的心跳。"],
+      "控制": ["有些温柔，只在权力的缝隙中出现。","你说你自由，其实只是顺从得更聪明。","掌控一切的人，最怕失去情绪的引信。"],
+      "欲望": ["所谓欲望，不过是想被看见、被理解、被留下。","你以为你在追逐，其实你在渴求回应。","真正危险的，不是欲望，而是你对它的克制。"],
+      "遗憾": ["有些错过，不需要解释，只需承认它疼。","如果一切可以重来，你大概还会再一次沉默。","那些没说出口的话，现在长成了梦里的雨声。"],
+      "亲密": ["靠得太近时，温柔也带刺。","有些人走得进身体，却永远进不了心。","真正的亲密，是沉默时的安心。"],
+      "成长": ["所谓长大，不过是学会了笑着告别自己。","你不是变冷了，是学会了在热里隐藏刀刃。","有些疼，是把你推出深渊的手。"],
+      "宽恕": ["原谅，并不是放过他，而是放过你自己。","有些人你不再恨，但也不会再爱了。","痛到极处，是一种无声的慈悲。"],
+      "假象": ["有些温柔只是训练得体的面具。","人们靠伪装活着，却渴望被看穿。","真相往往太安静，所以才不被相信。"],
+      "重生": ["废墟也是起点，只是你还没准备好走出去。","你所熬过的夜，终将反射出光。","若能带着伤口起舞，那就是真正的新生。"],
+      "失控": ["有些情绪是关不住的火，要么燃烧自己，要么引爆世界。","你不是真的疯了，只是压抑太久了。","所谓崩溃，不过是灵魂在提醒你：它撑不住了。"]
+    };
+
+    const colors = {
+      "孤独": "#aab9d0",
+      "控制": "#2d2d2d",
+      "欲望": "#8b1e3f",
+      "遗憾": "#c4b3d1",
+      "亲密": "#f1e3c6",
+      "成长": "#7a9e7e",
+      "宽恕": "#e9d3a6",
+      "假象": "#d4c2c2",
+      "重生": "#d1ecf1",
+      "失控": "#4e3e5a"
+    };
+
+    const quoteBox = document.getElementById('quote');
+    const bgm = document.getElementById('bgm');
+    bgm.volume = 0.5;
+
+    document.body.addEventListener('click', () => {
+      bgm.muted = false;
+      const playPromise = bgm.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Playback error:", error);
+        });
+      }
+    }, { once: true });
+
+    const keywords = Object.keys(quotes);
+    const placed = [];
+
+    function isOverlapping(x, y, size) {
+      return placed.some(p => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        return Math.sqrt(dx * dx + dy * dy) < size * 1.5;
+      });
+    }
+
+    function getTextColor(bgColor) {
+      const hex = bgColor.replace('#', '');
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      return brightness < 150 ? '#f1f1f1' : '#222';
+    }
+
+    keywords.forEach(word => {
+      const bubble = document.createElement('div');
+      bubble.classList.add('word-bubble');
+      bubble.textContent = word;
+      const size = 200;
+      let x, y, tries = 0;
+      do {
+        x = Math.random() * (window.innerWidth - size);
+        y = Math.random() * (window.innerHeight - size);
+        tries++;
+      } while (isOverlapping(x, y, size) && tries < 100);
+      placed.push({ x, y });
+      bubble.style.left = x + 'px';
+      bubble.style.top = y + 'px';
+      bubble.style.animationDuration = (16 + Math.random() * 8) + 's';
+      bubble.addEventListener('click', () => {
+        const pool = quotes[word];
+        const chosen = pool[Math.floor(Math.random() * pool.length)];
+        quoteBox.textContent = chosen;
+        quoteBox.classList.remove('fade-in');
+        void quoteBox.offsetWidth;
+        quoteBox.classList.add('fade-in');
+        const bg = colors[word] || 'white';
+        document.body.style.background = bg;
+        quoteBox.style.color = getTextColor(bg);
+      });
+      document.body.appendChild(bubble);
+      setTimeout(() => {
+        bubble.style.opacity = 1;
+      }, 100);
+    });
+
+    document.getElementById('keyword').addEventListener('change', function() {
+      const word = this.value.trim();
+      if (quotes[word]) {
+        const pool = quotes[word];
+        const chosen = pool[Math.floor(Math.random() * pool.length)];
+        quoteBox.textContent = chosen;
+        quoteBox.classList.remove('fade-in');
+        void quoteBox.offsetWidth;
+        quoteBox.classList.add('fade-in');
+        const bg = colors[word] || 'white';
+        document.body.style.background = bg;
+        quoteBox.style.color = getTextColor(bg);
+      }
+    });
+  </script>
+</body>
+</html>
